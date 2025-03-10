@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UTC ↔ IST Converter</title>
+  <!-- Bootstrap CSS for premium UI -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: #f8f9fa;
+    }
+    .converter-container {
+      max-width: 600px;
+      margin: 50px auto;
+      background: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    }
+    .result {
+      font-weight: 600;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="converter-container">
+    <h2 class="mb-4 text-center">UTC ↔ IST Time Converter</h2>
+    <div class="mb-3">
+      <label for="inputTime" class="form-label">Enter time (any supported format):</label>
+      <input type="text" class="form-control" id="inputTime" placeholder="e.g., 2025-07-01 14:30:00.000, 14:30, 2:30 pm">
+      <div class="form-text">
+        Supported formats: <br>
+        • yyyy-mm-dd hh:mm:ss.000<br>
+        • HH:mm<br>
+        • HH:mm:ss<br>
+        • hh:mm:ss am/pm<br>
+        • hh:mm am/pm
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Conversion Direction:</label>
+      <div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="conversionDirection" id="utcToIst" value="utcToIst" checked>
+          <label class="form-check-label" for="utcToIst">UTC to IST</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="conversionDirection" id="istToUtc" value="istToUtc">
+          <label class="form-check-label" for="istToUtc">IST to UTC</label>
+        </div>
+      </div>
+    </div>
+    <button id="convertBtn" class="btn btn-primary w-100">Convert</button>
+    <div id="output" class="result text-center"></div>
+  </div>
+
+  <script>
+    // Conversion offset in milliseconds: 5.5 hours = 19800000 ms
+    const OFFSET = 5.5 * 3600000;
+
+    // Regex patterns for supported formats:
+    const patterns = [
+      { 
+        // yyyy-mm-dd hh:mm:ss.000 (full date with milliseconds)
+        regex: /^(\d{4})-(\d{2})-(\d{2})[\sT](\d{2}):(\d{2}):(\d{2})\.(\d{3})$/,
+        formatter: function(date) {
+          // Format back to yyyy-mm-dd hh:mm:ss.000
+          return date.getUTCFullYear() + "-" +
+            String(date.getUTCMonth()+1).padStart(2,'0') + "-" +
+            String(date.getUTCDate()).padStart(2,'0') + " " +
+            String(date.getUTCHours()).padStart(2,'0') + ":" +
+            String(date.getUTCMinutes()).padStart(2,'0') + ":" +
+            String(date.getUTCSeconds()).padStart(2,'0') + "." +
+            String(date.getUTCMilliseconds()).padStart(3,'0');
+        },
+        parser: function(match) {
+          return {
+            year: parseInt(match[1]),
+            month: parseInt(match[2]),
+            day: parseInt(match[3]),
+            hour: parseInt(match[4]),
+            minute: parseInt(match[5]),
+            second: parseInt(match[6]),
+            ms: parseInt(match[7])
+          };
+        }
+      },
+      { 
+        // HH:mm:ss (24-hour with seconds)
+        regex: /^(\d{2}):(\d{2}):(\d{2})$/,
+        formatter: function(date) {
+          return String(date.getUTCHours()).padStart(2,'0') + ":" +
+            String(date.getUTCMinutes()).padStart(2,'0') + ":" +
+            String(date.getUTCSeconds()).padStart(2,'0');
+        },
+        parser: function(match) {
+          return {
+            year: 1970, month: 1, day: 1,
+            hour: parseInt(match[1]),
+            minute: parseInt(match[2]),
+            second: parseInt(match[3]),
+            ms: 0
+          };
+        }
+      },
+      { 
+        // HH:mm (24-hour without seconds)
+        regex: /^(\d{2}):(\d{2})$/,
+        formatter: function(date) {
+          return String(date.getUTCHours()).padStart(2,'0') + ":" +
+            String(date.getUTCMinutes()).padStart(2,'0');
+        },
+        parser: function(match) {
+          return {
+            year: 1970, month: 1, day: 1,
+            hour: parseInt(match[1]),
+            minute: parseInt(match[2]),
+            second: 0,
+            ms: 0
+          };
+        }
+      },
+      { 
+        // hh:mm:ss am/pm (12-hour with seconds)
+        regex: /^(\d{1,2}):(\d{2}):(\d{2})\s*(am|pm)$/i,
+        formatter: function(date) {
+          let hour = date.getUTCHours();
+          const ampm = hour >= 12 ? "pm" : "am";
+          hour = hour % 12 || 12;
+          return hour + ":" +
+            String(date.getUTCMinutes()).padStart(2,'0') + ":" +
+            String(date.getUTCSeconds()).padStart(2,'0') + " " + ampm;
+        },
+        parser: function(match) {
+          let hour = parseInt(match[1]);
+          const minute = parseInt(match[2]);
+          const second = parseInt(match[3]);
+          const period = match[4].toLowerCase();
+          if(period === "pm" && hour < 12) hour += 12;
+          if(period === "am" && hour === 12) hour = 0;
+          return {
+            year: 1970, month: 1, day: 1,
+            hour: hour,
+            minute: minute,
+            second: second,
+            ms: 0
+          };
+        }
+      },
+      { 
+        // hh:mm am/pm (12-hour without seconds)
+        regex: /^(\d{1,2}):(\d{2})\s*(am|pm)$/i,
+        formatter: function(date) {
+          let hour = date.getUTCHours();
+          const ampm = hour >= 12 ? "pm" : "am";
+          hour = hour % 12 || 12;
+          return hour + ":" +
+            String(date.getUTCMinutes()).padStart(2,'0') + " " + ampm;
+        },
+        parser: function(match) {
+          let hour = parseInt(match[1]);
+          const minute = parseInt(match[2]);
+          const period = match[3].toLowerCase();
+          if(period === "pm" && hour < 12) hour += 12;
+          if(period === "am" && hour === 12) hour = 0;
+          return {
+            year: 1970, month: 1, day: 1,
+            hour: hour,
+            minute: minute,
+            second: 0,
+            ms: 0
+          };
+        }
+      }
+    ];
+
+    // Utility: Create a UTC date from parsed values.
+    function createUTCDate({year, month, day, hour, minute, second, ms}) {
+      // month-1 because JS Date months are 0-indexed.
+      return new Date(Date.UTC(year, month - 1, day, hour, minute, second, ms));
+    }
+
+    // Main conversion function.
+    function convertTime(input, direction) {
+      let parsedData = null, formatter = null;
+      for (const pattern of patterns) {
+        const match = input.match(pattern.regex);
+        if (match) {
+          parsedData = pattern.parser(match);
+          formatter = pattern.formatter;
+          break;
+        }
+      }
+      if (!parsedData) {
+        throw new Error("Unsupported format. Please check the input format.");
+      }
+      // Create a date assuming the numbers are in the source time zone.
+      // For UTC-to-IST: input is UTC, so create a UTC date and add 5:30.
+      // For IST-to-UTC: input is IST, so create a date from the numbers then subtract 5:30.
+      let sourceDate = createUTCDate(parsedData);
+      let targetDate;
+      if(direction === "utcToIst") {
+        targetDate = new Date(sourceDate.getTime() + OFFSET);
+      } else {
+        targetDate = new Date(sourceDate.getTime() - OFFSET);
+      }
+      return formatter(targetDate);
+    }
+
+    // Event listener for the Convert button.
+    document.getElementById("convertBtn").addEventListener("click", function() {
+      const input = document.getElementById("inputTime").value.trim();
+      const direction = document.querySelector('input[name="conversionDirection"]:checked').value;
+      const outputEl = document.getElementById("output");
+      if (!input) {
+        outputEl.innerHTML = '<span class="text-danger">Please enter a time value.</span>';
+        return;
+      }
+      try {
+        const converted = convertTime(input, direction);
+        outputEl.innerHTML = `<span class="text-success">Converted Time: ${converted}</span>`;
+      } catch (e) {
+        outputEl.innerHTML = `<span class="text-danger">${e.message}</span>`;
+      }
+    });
+  </script>
+  <!-- Bootstrap Bundle with Popper for interactive components (if needed) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
